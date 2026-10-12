@@ -29,6 +29,7 @@ import {
   openRepo,
   previewAction,
   runAction,
+  stage,
 } from '../core/gitstate';
 import {
   ciChip,
@@ -186,30 +187,14 @@ export const gitView: View = {
       // The row underneath opens the diff; the box is not the row.
       box.addEventListener('click', (e) => e.stopPropagation());
       box.addEventListener('change', () => {
-        const path = box.dataset.stage!;
-        if (box.checked) {
-          void runAction('stage_file', [path]);
-        } else {
-          // Unstaging restores from HEAD, and a repository with no commits has
-          // none — there the files come back out of the index instead.
-          void runAction(
-            git.status?.has_commits ? 'unstage_file' : 'unstage_new',
-            [path],
-          );
-        }
+        void stage(box.dataset.stage!, box.checked);
       });
     });
 
     const all = root.querySelector<HTMLInputElement>('#git-all');
     if (all) {
       all.addEventListener('change', () => {
-        void runAction(
-          all.checked
-            ? 'stage_all'
-            : git.status?.has_commits
-              ? 'unstage_all'
-              : 'unstage_new',
-        );
+        void stage(null, all.checked);
       });
     }
 

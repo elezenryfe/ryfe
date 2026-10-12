@@ -140,9 +140,16 @@ export async function openRepo(repo: Repo) {
   await reloadStatus();
 }
 
+/**
+ * Staging writes the index without waiting for git, so a status read — or the
+ * commit that follows a click — has to be able to queue behind it here.
+ */
+let pending: Promise<unknown> = Promise.resolve();
+
 export async function reloadStatus() {
   const repo = git.selected;
   if (!repo) return;
+  await pending;
   try {
     git.status = await invoke<RepoStatus>('git_status', { repo: repo.path });
     git.error = null;
@@ -212,6 +219,8 @@ export async function runAction(
   refresh();
 
   try {
+    // A box the user just ticked may still be staging; run after that.
+    await pending;
     const out = await invoke<GitOutput>('git_run', {
       repo: repo.path,
       action,
@@ -221,7 +230,9 @@ export async function runAction(
     git.output = out;
     git.message = '';
     git.confirm = '';
-    if (out.ok) git.cheer += 1;
+    // Only a push is worth celebrating; staging and committing are the quiet
+    // steps on the way there.
+    if (out.ok && action.startsWith('push')) git.cheer += 1;
     // A folder that is not a repository yet has no status to read; `init` makes
     // it one, and the actions after it reload normally.
     if (repo.has_git) await reloadStatus();
@@ -232,6 +243,69 @@ export async function runAction(
   } finally {
     git.running = false;
     git.runningAction = null;
+    refresh();
+  }
+}
+
+let stageTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Staging, which is the one action that has to feel like the checkbox it is.
+ *
+ * So it does not go through `runAction`: the flag flips here and now, before git
+ * is asked, and a burst of boxes costs one status read at the end instead of one
+ * per file. The half-typed commit message is left alone too — the boxes get
+ * clicked while it is being written.
+ *
+ * `path` of null is the select-all box.
+ */
+export async function stage(path: string | null, staged: boolean) {
+  const repo = git.selected;
+  const status = git.status;
+  if (!repo || !status) return;
+
+  for (const f of status.files) if (path === null || f.path === path) f.staged = staged;
+  refresh();
+
+  // Unstaging restores from HEAD, and a repository with no commits has none —
+  // there the files come back out of the index instead.
+  const action = staged
+    ? path === null
+      ? 'stage_all'
+      : 'stage_file'
+    : !status.has_commits
+      ? 'unstage_new'
+      : path === null
+        ? 'unstage_all'
+        : 'unstage_file';
+
+  const done = (pending = invoke<GitOutput>('git_run', {
+    repo: repo.path,
+    action,
+    args: path === null ? [] : [path],
+    confirm: '',
+  }).then(
+    (out) => (out.ok ? null : out.stderr.trim() || out.stdout.trim() || 'git refused that.'),
+    (e) => String(e),
+  ));
+
+  if (stageTimer === null) {
+    stageTimer = setTimeout(() => {
+      stageTimer = null;
+      void reloadStatus();
+    }, 300);
+  }
+
+  const failure = await done;
+  if (failure) {
+    // The box has to go back to whatever git really has, and that read clears
+    // the error line, so the reason is put up after it.
+    if (stageTimer !== null) {
+      clearTimeout(stageTimer);
+      stageTimer = null;
+    }
+    await reloadStatus();
+    git.error = failure;
     refresh();
   }
 }
