@@ -43,3 +43,15 @@ export function attachReposition(fn: () => void) {
 export function reposition() {
   reapply?.();
 }
+
+let resizeTall: (() => void) | null = null;
+
+/** Lets the Git panel ask for a taller island without importing the shell. */
+export function attachTallToggle(fn: () => void) {
+  resizeTall = fn;
+}
+
+/** The panel's ⤢ button: as tall as the screen allows, or back to what it was. */
+export function toggleTall() {
+  resizeTall?.();
+}

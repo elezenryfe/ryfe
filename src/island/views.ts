@@ -39,7 +39,7 @@ import {
   subtitle,
   type PullRequest,
 } from '../core/ghstate';
-import { refresh } from './host';
+import { refresh, toggleTall } from './host';
 import {
   GEAR,
   loadSettingsView,
@@ -174,6 +174,7 @@ export const gitView: View = {
     root.querySelector('#git-refresh')?.addEventListener('click', () => {
       void loadRepos(true);
     });
+    root.querySelector('#git-tall')?.addEventListener('click', toggleTall);
 
     // --- file rows open their diff ---
     root.querySelectorAll<HTMLElement>('[data-file]').forEach((el) => {
@@ -387,6 +388,12 @@ function renderRepo(): string {
     (st && st.ahead > 0 ? `<span class="chip hot">↑${st.ahead}</span>` : '') +
     (st && st.behind > 0 ? `<span class="chip hot">↓${st.behind}</span>` : '') +
     `<span style="flex:1"></span>` +
+    // The file list is what the island's height is spent on, so the button that
+    // buys it sits with the list rather than out on the window frame.
+    `<button class="btn ghost" id="git-tall" style="padding:5px 8px" ` +
+    `title="Taller panel — same as dragging the corner" aria-label="Taller panel">` +
+    svg('<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/>', 14, '0 0 24 24') +
+    `</button>` +
     `<button class="btn ghost" id="git-refresh" style="padding:5px 10px">Refresh</button>` +
     `</div>`;
 

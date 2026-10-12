@@ -21,7 +21,12 @@ import {
 import { isBusy, loadModels, wireChat } from './core/chatstate';
 import { git, loadRepos, setRoots } from './core/gitstate';
 import { attentionCount, loadActivity, loadPulse } from './core/ghstate';
-import { attachHost, attachReposition, setVisible } from './island/host';
+import {
+  attachHost,
+  attachReposition,
+  attachTallToggle,
+  setVisible,
+} from './island/host';
 import { settingsView, VIEWS, svg, type View } from './island/views';
 import { PetEngine, type PetState } from './pet/pulsar';
 
@@ -147,27 +152,66 @@ async function setMode(next: Mode) {
   }
 }
 
+/** As tall as the open island may get: the screen, less room for its edges. */
+const maxH = () => Math.min(1400, screen.availHeight - 80);
+
+/**
+ * How tall the ⤢ button makes the panel. Most of the screen, and inside the
+ * bounds the grip drags within, because the two write the same window size.
+ */
+const tallH = () => clamp(Math.round(screen.availHeight * 0.8), 240, maxH());
+
+/** What a tall panel comes back to: whatever the user last left it at. */
+let restoreH = BOX.open.h;
+
+/**
+ * Tells Rust how big the open window now is — once a frame rather than once an
+ * event, because the island is drawn inside the window and cannot grow past it.
+ */
+let sizeQueued = false;
+function pushOpenSize() {
+  if (sizeQueued) return;
+  sizeQueued = true;
+  requestAnimationFrame(() => {
+    sizeQueued = false;
+    if (mode === 'open') void setIslandOpenSize(BOX.open.w, BOX.open.h);
+  });
+}
+
+/**
+ * The ⤢ button: the same knob the grip drags, moved to a size worth having in
+ * one click. Where it comes back to is wherever the user last put it, so the
+ * button and the grip never disagree about what "normal" is.
+ */
+function toggleTall() {
+  if (mode !== 'open') return;
+  if (BOX.open.h >= tallH()) {
+    // Coming back down: the window may only shrink once the island has, or its
+    // bottom — the commit row — is cut off part-way through. As in setMode.
+    BOX.open.h = restoreH;
+    boxH.curveTo(BOX.open.h);
+    window.setTimeout(() => {
+      if (mode === 'open') pushOpenSize();
+    }, 380);
+  } else {
+    // Growing: the window has to be tall first, or the island grows past it.
+    restoreH = BOX.open.h;
+    BOX.open.h = tallH();
+    boxH.springTo(BOX.open.h);
+    pushOpenSize();
+  }
+}
+
 /**
  * Dragging the grip gives the open island a size of its own. The file list is
  * what grows: everything under it is a fixed height, and the list is what is
  * left.
  *
- * The window moves as the drag goes — once a frame rather than once an event —
- * because the island is drawn inside the window and cannot grow past it. Bounded
- * by the screen, since a panel taller than the display can never be dragged back.
+ * Bounded by the screen, since a panel taller than the display can never be
+ * dragged back.
  */
 function wireGrip() {
   const grip = $('#grip');
-  let queued = false;
-
-  const pushOpenSize = () => {
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => {
-      queued = false;
-      if (mode === 'open') void setIslandOpenSize(BOX.open.w, BOX.open.h);
-    });
-  };
 
   grip.addEventListener('pointerdown', (e) => {
     if (mode !== 'open') return;
@@ -181,11 +225,7 @@ function wireGrip() {
         520,
         Math.min(1800, screen.availWidth - 40),
       );
-      BOX.open.h = clamp(
-        from.h + ev.clientY - from.y,
-        240,
-        Math.min(1400, screen.availHeight - 80),
-      );
+      BOX.open.h = clamp(from.h + ev.clientY - from.y, 240, maxH());
       boxW.springTo(BOX.open.w);
       boxH.springTo(BOX.open.h);
       pushOpenSize();
@@ -525,6 +565,7 @@ async function boot() {
   // Let views ask for a redraw, or a re-placement, without importing this module.
   attachHost(refresh);
   attachReposition(() => void setIslandSize(mode));
+  attachTallToggle(toggleTall);
 
   // The open island can be dragged to whatever size suits the view.
   wireGrip();
