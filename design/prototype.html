@@ -1,0 +1,989 @@
+<title>Ryfe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+/* ============================================================
+   RYFE — design direction, round 2
+   Layout: one wide workbench column. Page chrome follows the OS
+           theme; the island is an overlay product surface and
+           keeps its own dark palette on purpose.
+   Colour: plum-ink ground. The accent is not fixed — it is taken
+           from whichever character is selected.
+   Type:   Bricolage Grotesque / Instrument Sans / JetBrains Mono.
+   ============================================================ */
+
+:root{
+  --bg:#F6F4F9; --bg-2:#FFFFFF; --bg-3:#EEEAF4; --bg-4:#E6E0EF;
+  --fg:#181128; --fg-2:#5B5170; --fg-3:#8B81A2;
+  --line:#DED7E8; --line-2:#ECE7F3;
+  /* the accent follows the selected character: --acc-a is its light-theme
+     value, --acc-b its dark-theme one. Both are set inline from JS; the
+     rules below choose between them, so an inline style never has to know
+     which theme is active. --acc-2 is always the bright one, because it is
+     only ever used inside the island, which is always dark. */
+  --acc:#6D3BE0; --acc-2:#A78BFA;
+  --ok:#0B7355; --crit:#B0332A;
+  --shadow: 0 1px 2px rgba(24,17,40,.05), 0 10px 30px -16px rgba(24,17,40,.30);
+
+  --c-git:#C25A12; --c-gh:#5B5470; --c-cal:#3B7FE0;
+
+  --r-lg:22px; --r-md:14px; --r-sm:9px;
+  --font-ui:'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display:'Bricolage Grotesque', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F0B17; --bg-2:#171122; --bg-3:#1E1730; --bg-4:#271E3C;
+    --fg:#F1ECFA; --fg-2:#A79CBE; --fg-3:#7A7091;
+    --line:#2C2340; --line-2:#221A33;
+    --acc: var(--acc-b, #A78BFA);
+    --ok:#4FD1A5; --crit:#F07C70;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 40px -20px rgba(0,0,0,.7);
+    --c-git:#FFA45C; --c-gh:#B9B2CF; --c-cal:#7DAEF7;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F0B17; --bg-2:#171122; --bg-3:#1E1730; --bg-4:#271E3C;
+  --fg:#F1ECFA; --fg-2:#A79CBE; --fg-3:#7A7091;
+  --line:#2C2340; --line-2:#221A33;
+  --acc: var(--acc-b, #A78BFA);
+  --ok:#4FD1A5; --crit:#F07C70;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 40px -20px rgba(0,0,0,.7);
+  --c-git:#FFA45C; --c-gh:#B9B2CF; --c-cal:#7DAEF7;
+  color-scheme: dark;
+}
+
+/* theme picks between the two accent values the character supplied */
+:root{ --acc: var(--acc-a, #6D3BE0); --acc-2: var(--acc-b, #A78BFA); }
+
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--font-ui); font-size:15px; line-height:1.55;
+  padding-block:0 72px; padding-inline:20px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin-inline:auto}
+h1,h2,h3{font-family:var(--font-display); text-wrap:balance; margin:0; letter-spacing:-.015em; font-weight:600}
+p{margin:0}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11.5px; font-weight:600; letter-spacing:.11em; text-transform:uppercase; color:var(--fg-3)}
+
+header{padding-block:56px 34px; display:flex; flex-direction:column; gap:16px}
+.brandrow{display:flex; align-items:center; gap:11px}
+.mark{width:30px;height:30px;flex:none}
+.brandname{font-family:var(--font-display); font-weight:700; font-size:19px; letter-spacing:-.02em}
+h1{font-size:clamp(30px,5.2vw,47px); line-height:1.06; max-width:20ch}
+.lede{color:var(--fg-2); font-size:17px; max-width:62ch; text-wrap:pretty}
+.tagrow{display:flex; flex-wrap:wrap; gap:7px; padding-top:4px}
+.tag{font-size:12.5px; padding:4px 10px; border-radius:99px; background:var(--bg-3); color:var(--fg-2); border:1px solid var(--line-2)}
+.tag.acc{background:color-mix(in oklab, var(--acc) 13%, transparent); color:var(--acc); border-color:transparent; font-weight:600}
+
+section{padding-block:34px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:22px}
+.sechead{display:flex; flex-direction:column; gap:7px; max-width:64ch}
+h2{font-size:clamp(21px,2.6vw,26px)}
+.sechead p{color:var(--fg-2); text-wrap:pretty}
+
+/* ---------- characters ---------- */
+.pets{display:grid; grid-template-columns:repeat(4,1fr); gap:13px}
+.pet{
+  appearance:none; text-align:left; font:inherit; color:inherit; cursor:pointer;
+  background:var(--bg-2); border:1px solid var(--line); border-radius:var(--r-lg);
+  padding:14px 14px 15px; display:flex; flex-direction:column; gap:10px;
+  box-shadow:var(--shadow); transition:border-color .18s, transform .18s, background .18s;
+}
+.pet:hover{transform:translateY(-2px)}
+.pet[aria-pressed="true"]{border-color:var(--acc); background:color-mix(in oklab, var(--acc) 9%, var(--bg-2))}
+.pet canvas{width:100%; height:118px; display:block; border-radius:var(--r-md); background:var(--bg-3)}
+.pet[aria-pressed="true"] canvas{background:var(--bg-2)}
+.petname{font-family:var(--font-display); font-size:16.5px; font-weight:600}
+.petdesc{font-size:13px; color:var(--fg-2); text-wrap:pretty}
+.petwork{font-size:12px; color:var(--fg-3); font-family:var(--font-mono)}
+.pettraits{display:flex; flex-wrap:wrap; gap:5px; margin-top:auto; padding-top:3px}
+.trait{font-size:11px; font-family:var(--font-mono); color:var(--fg-3); border:1px solid var(--line); border-radius:6px; padding:2px 6px}
+.pet[aria-pressed="true"] .trait{border-color:color-mix(in oklab, var(--acc) 40%, transparent); color:var(--acc)}
+.pick{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-3)}
+.pet[aria-pressed="true"] .pick{color:var(--acc)}
+
+/* ---------- island stage ---------- */
+.stage{
+  /* the island is always dark, so inside it the accent is always the bright
+     variant — that keeps every descendant rule correct with one declaration */
+  --acc: var(--acc-b, #A78BFA);
+  --i-fg:#F2EDFB; --i-fg-2:#9C90B8; --i-fg-3:#6E6389;
+  --i-1:#191228; --i-2:#211937; --i-3:#2B2145;
+  --i-line:rgba(255,255,255,.085); --i-line-2:rgba(255,255,255,.05);
+  color-scheme:dark; color:var(--i-fg);
+  border-radius:var(--r-lg); border:1px solid var(--line);
+  padding:26px 22px 30px; display:flex; flex-direction:column; align-items:center;
+  background:
+    radial-gradient(120% 90% at 50% -18%, #3A2C5C 0%, transparent 58%),
+    radial-gradient(80% 60% at 82% 108%, #2B2138 0%, transparent 60%),
+    linear-gradient(168deg,#1B1526 0%,#120E1C 55%,#0D0A14 100%);
+}
+.stagenote{
+  font-size:11.5px; color:#8C82A6; font-family:var(--font-mono);
+  display:flex; align-items:center; gap:8px; align-self:flex-start; padding-bottom:20px;
+}
+.stagenote::before{content:''; width:6px; height:6px; border-radius:99px; background:var(--acc)}
+
+.isle{width:100%; max-width:720px; display:flex; flex-direction:column; gap:7px}
+.cap{
+  appearance:none; font:inherit; cursor:pointer; text-align:left; width:100%;
+  background:var(--i-1); border:1px solid var(--i-line); color:var(--i-fg);
+  border-radius:34px; padding:7px 15px 7px 7px;
+  display:flex; align-items:center; gap:13px;
+  box-shadow:0 10px 34px -12px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.07);
+  transition:border-color .2s;
+}
+.cap:hover{border-color:rgba(255,255,255,.17)}
+.cap canvas{width:50px;height:50px;display:block;flex:none}
+.capmain{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1}
+.capname{font-size:13.5px; font-weight:600; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.capsub{font-size:11.5px; color:var(--i-fg-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tiles{display:flex; gap:6px; flex:none}
+.tile{
+  appearance:none; border:1px solid var(--i-line); background:var(--i-2); cursor:pointer;
+  width:34px;height:34px;border-radius:11px; display:grid; place-items:center; padding:0;
+  transition:background .16s, border-color .16s, transform .16s;
+}
+.tile:hover{transform:translateY(-2px)}
+.tile[aria-pressed="true"]{background:var(--i-3); border-color:rgba(255,255,255,.24)}
+.tile svg{width:17px;height:17px;display:block}
+.caret{width:24px;height:24px;flex:none;display:grid;place-items:center;color:var(--i-fg-3);transition:transform .25s}
+.isle[data-open="true"] .caret{transform:rotate(180deg)}
+
+.body{
+  background:var(--i-1); border:1px solid var(--i-line); border-radius:20px;
+  padding:15px 16px 16px; display:flex; flex-direction:column; gap:12px;
+  box-shadow:0 22px 50px -20px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.05);
+}
+.bodyhead{display:flex; align-items:baseline; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.bodytitle{font-family:var(--font-display); font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px}
+.bodytitle .disc{width:8px;height:8px;border-radius:99px;background:var(--acc)}
+.bodymeta{font-family:var(--font-mono); font-size:11px; color:var(--i-fg-3)}
+
+.row{display:flex; align-items:center; gap:12px; padding:9px 11px; background:var(--i-2); border:1px solid var(--i-line-2); border-radius:13px}
+.row .lead{flex:none; font-family:var(--font-mono); font-size:11.5px; color:var(--i-fg-2); width:50px}
+.row .grow{flex:1; min-width:0}
+.row .t1{font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block}
+.row .t2{font-size:11.5px; color:var(--i-fg-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block}
+.chip{flex:none; font-size:11px; font-weight:600; padding:3px 8px; border-radius:99px; background:var(--i-3); color:var(--i-fg-2); border:1px solid var(--i-line); font-family:var(--font-mono)}
+.chip.hot{color:var(--acc-2); border-color:color-mix(in oklab, var(--acc) 34%, transparent); background:color-mix(in oklab, var(--acc) 12%, transparent)}
+.chip.good{color:#5FE3B4; border-color:rgba(95,227,180,.28); background:rgba(95,227,180,.09)}
+.chip.bad{color:#FF8B7E; border-color:rgba(255,139,126,.28); background:rgba(255,139,126,.09)}
+.add{color:#5FE3B4} .del{color:#FF8B7E}
+
+.gitbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.repo{display:flex;align-items:center;gap:7px;font-family:var(--font-mono); font-size:12px; background:var(--i-2); border:1px solid var(--i-line); border-radius:9px; padding:5px 9px; color:var(--i-fg-2)}
+.commitrow{display:flex; gap:8px; align-items:center}
+.commitrow input{flex:1; min-width:0; font:inherit; font-size:13px; color:var(--i-fg); background:var(--i-2); border:1px solid var(--i-line); border-radius:11px; padding:9px 12px; outline:none}
+.commitrow input::placeholder{color:var(--i-fg-3)}
+.commitrow input:focus{border-color:color-mix(in oklab, var(--acc) 55%, transparent)}
+.btn{appearance:none; font:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:11px; padding:9px 15px; border:1px solid transparent; flex:none; background:var(--acc); color:#160E2B; transition:filter .15s}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent; border-color:var(--i-line); color:var(--i-fg-2)}
+.hintline{font-size:11.5px; color:var(--i-fg-3); font-family:var(--font-mono)}
+
+/* chat */
+.chat{display:flex; flex-direction:column; gap:8px}
+.bub{max-width:88%; font-size:13px; padding:8px 11px; border-radius:13px; text-wrap:pretty}
+.bub.me{align-self:flex-end; background:var(--i-3); border:1px solid var(--i-line); border-bottom-right-radius:5px}
+.bub.bot{align-self:flex-start; background:var(--i-2); border:1px solid var(--i-line-2); border-bottom-left-radius:5px}
+.tool{align-self:flex-start; display:flex; align-items:center; gap:7px; font-family:var(--font-mono); font-size:11px; color:var(--i-fg-3)}
+.tool .dot{width:5px;height:5px;border-radius:99px;background:#5FE3B4}
+.chatrow{display:flex; gap:8px; align-items:center; margin-top:2px}
+.chatrow input{flex:1; min-width:0; font:inherit; font-size:13px; color:var(--i-fg); background:var(--i-2); border:1px solid var(--i-line); border-radius:11px; padding:9px 12px; outline:none}
+.chatrow input::placeholder{color:var(--i-fg-3)}
+.chatrow input:focus{border-color:color-mix(in oklab, var(--acc) 55%, transparent)}
+
+/* ---------- capability grid ---------- */
+.caps{display:grid; grid-template-columns:repeat(2,1fr); gap:13px}
+.capcard{background:var(--bg-2); border:1px solid var(--line); border-radius:var(--r-md); padding:15px 16px 16px; display:flex; flex-direction:column; gap:9px; box-shadow:var(--shadow)}
+.caphead{display:flex; align-items:center; gap:9px}
+.caphead .disc{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;flex:none}
+.caphead .disc svg{width:15px;height:15px}
+.caphead h3{font-size:15px}
+.caplist{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:5px}
+.caplist li{font-size:13.5px; color:var(--fg-2); padding-left:15px; position:relative; text-wrap:pretty}
+.caplist li::before{content:''; position:absolute; left:2px; top:9px; width:5px; height:5px; border-radius:99px; background:var(--line)}
+.capcard.wide{grid-column:1/-1}
+
+/* ---------- notes ---------- */
+.notes{display:grid; grid-template-columns:repeat(2,1fr); gap:13px}
+.note{border:1px solid var(--line); border-left:3px solid var(--acc); border-radius:0 var(--r-md) var(--r-md) 0; background:var(--bg-2); padding:14px 16px; display:flex; flex-direction:column; gap:6px}
+.note h3{font-size:14.5px}
+.note p{font-size:13.5px; color:var(--fg-2); text-wrap:pretty}
+.note code{font-family:var(--font-mono); font-size:12.5px; background:var(--bg-3); padding:1px 5px; border-radius:5px}
+.decide{display:flex; flex-direction:column; gap:9px}
+.deciderow{display:flex; gap:11px; align-items:baseline; font-size:14px; color:var(--fg-2)}
+.deciderow b{color:var(--fg); font-weight:600; flex:none; min-width:104px}
+
+footer{border-top:1px solid var(--line); padding-top:22px; color:var(--fg-3); font-size:13px; display:flex; flex-direction:column; gap:6px}
+
+a{color:var(--acc)}
+:focus-visible{outline:2px solid var(--acc); outline-offset:2px; border-radius:4px}
+
+@media (max-width:900px){
+  .pets{grid-template-columns:repeat(2,1fr)}
+  .caps{grid-template-columns:1fr}
+  .notes{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .pets{grid-template-columns:1fr}
+  .pet canvas{height:108px}
+  .stage{padding:20px 14px 24px}
+  .tiles .tile:nth-child(n+4){display:none}
+  .deciderow{flex-direction:column; gap:2px}
+  .deciderow b{min-width:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important}
+}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="brandrow">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <defs><radialGradient id="mg" cx="0.35" cy="0.32" r="0.8">
+        <stop offset="0" stop-color="#E4D6FF"/><stop offset="0.45" stop-color="#9575F0"/><stop offset="1" stop-color="#3A1F80"/>
+      </radialGradient></defs>
+      <circle cx="16" cy="16" r="8.6" fill="url(#mg)"/>
+      <ellipse cx="16" cy="16" rx="14.4" ry="4.4" fill="none" stroke="#C4B5FD" stroke-width="2.1" transform="rotate(-20 16 16)" opacity="0.75"/>
+      <circle cx="13.2" cy="15.4" r="1.5" fill="#f4eeff"/><circle cx="18.8" cy="15.4" r="1.5" fill="#f4eeff"/>
+    </svg>
+    <span class="brandname">Ryfe</span>
+  </div>
+
+  <h1>A small machine that lives at the top of your screen.</h1>
+  <p class="lede">
+    Round two. You liked Orbit best, so everything here is its family — celestial, geometric, drawn
+    entirely in code. Seven candidates. Click one to put it in the island; click the island to open it;
+    click the tiles to switch panels. The island's accent colour follows whichever you pick.
+  </p>
+  <div class="tagrow">
+    <span class="tag acc">Windows 11 · Tauri 2</span>
+    <span class="tag">git · GitHub · Calendar</span>
+    <span class="tag">DeepSeek for reasoning</span>
+    <span class="tag">No agent-session watching</span>
+  </div>
+</header>
+
+<section>
+  <div class="sechead">
+    <span class="eyebrow">Pick one</span>
+    <h2>Seven in Orbit's family</h2>
+    <p>
+      Sphere-based, no limbs, no mouth — a small object that watches you work rather than a mascot that
+      performs at you. Each one has a working state, so it can double as a status light: when git is
+      pushing or Ryfe is thinking, it visibly changes rather than just sitting there.
+    </p>
+  </div>
+  <div class="pets" id="pets"></div>
+</section>
+
+<section>
+  <div class="sechead">
+    <span class="eyebrow">Where it lives</span>
+    <h2>The island</h2>
+    <p>
+      A capsule at the top edge that never takes focus and never appears in the taskbar. Collapsed it is
+      a sliver; the tiles are the four things you asked for. Open one and it gets a real panel.
+    </p>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="stagenote">preview — sample data, nothing here is connected</div>
+
+    <div class="isle" id="isle" data-open="true">
+      <button class="cap" id="cap" aria-expanded="true" aria-controls="islebody">
+        <canvas id="islepet" width="100" height="100"></canvas>
+        <span class="capmain">
+          <span class="capname" id="capname">Orbit</span>
+          <span class="capsub" id="capsub">4 files changed · next event in 42m</span>
+        </span>
+        <span class="tiles" id="tiles"></span>
+        <span class="caret" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5.5 7 9l3.5-3.5"/></svg>
+        </span>
+      </button>
+
+      <div class="body" id="islebody"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sechead">
+    <span class="eyebrow">The point of it</span>
+    <h2>What it does</h2>
+    <p>
+      Four things, done properly, rather than a dashboard you forget to open. Everything runs locally;
+      the only network calls are to services you connected yourself.
+    </p>
+  </div>
+  <div class="caps" id="caps"></div>
+</section>
+
+<section>
+  <div class="sechead">
+    <span class="eyebrow">Before we build</span>
+    <h2>Two traps I found, and the open questions</h2>
+    <p>
+      Both of these were checked against live documentation rather than memory, and both would have
+      shown up as mysterious bugs weeks in.
+    </p>
+  </div>
+  <div class="notes">
+    <div class="note">
+      <h3>Google would log you out every 7 days</h3>
+      <p>
+        While an OAuth app sits in <em>Testing</em>, Google expires its refresh tokens after a week. The
+        app works, then one morning every calendar call fails with <code>invalid_grant</code> and it looks
+        like a bug in Ryfe. The fix is to publish the app to <em>In production</em> and simply not submit
+        it for verification — Google's personal-use exemption covers you under 100 users. But do not
+        upload a logo, because that alone puts you in the review queue.
+      </p>
+    </div>
+    <div class="note">
+      <h3>DeepSeek retires model names fast</h3>
+      <p>
+        <code>deepseek-chat</code> and <code>deepseek-reasoner</code> were retired in July 2026. Today it
+        is <code>deepseek-flash</code> and <code>deepseek-v4-pro</code> — and your own
+        <code>stock_evaluation</code> project is still calling the older <code>deepseek-v4-flash</code>,
+        which now only works as a temporary alias. So Ryfe reads the model list from the API at startup
+        instead of hardcoding anything.
+      </p>
+    </div>
+    <div class="note">
+      <h3>The Google client you have won't work</h3>
+      <p>
+        The <code>GOOGLE_CLIENT_ID</code> in your <code>.env</code> belongs to your
+        <code>jobtailor</code> and <code>finance_app</code> sign-in flows — those are <em>Web</em>
+        clients, and a web client can only use a redirect URI it registered in advance, port included.
+        Calendar needs a <em>Desktop</em> client, which is a two-minute job in Cloud Console. It's
+        step one, and nothing else waits on it.
+      </p>
+    </div>
+    <div class="note">
+      <h3>Thinking mode is quietly on</h3>
+      <p>
+        DeepSeek defaults to thinking, and in that mode <code>temperature</code> is silently ignored,
+        <code>tool_choice: "required"</code> returns a 400, and the reasoning text has to be echoed back
+        on every turn or the next call fails. Ryfe turns thinking off for normal chat and keeps it behind
+        a "think harder" toggle. Your existing DeepSeek code already does exactly this.
+      </p>
+    </div>
+  </div>
+
+  <div class="decide">
+    <span class="eyebrow" style="padding-top:6px">What I need from you</span>
+    <div class="deciderow"><b>Character</b><span>Which of the seven — or say what's wrong with them and I'll draw again.</span></div>
+    <div class="deciderow"><b>Google setup</b><span>Whether you want me to walk you through the Desktop client now or later.</span></div>
+    <div class="deciderow"><b>The rest</b><span>What else goes on the list after these four. You said there's more.</span></div>
+  </div>
+</section>
+
+<footer>
+  <span>Design reference for Ryfe. The visual system carries into the app; the sample rows do not.</span>
+  <span class="mono">C:\elezen_ryfe-github\ryfe\design\prototype.html</span>
+</footer>
+
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = (s, r) => (r || document).querySelector(s);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const TAU = Math.PI * 2;
+
+/* ============================================================
+   Shared drawing helpers
+   ============================================================ */
+function eyes(x, ex, ey, r, look, blink, col, glint, spread){
+  spread = spread || 1.5;
+  const nx = look.x * r * 0.34, ny = look.y * r * 0.26;
+  const ry = Math.max(r * 0.07, r * (1 - blink * 0.94));
+  for (const s of [-1, 1]){
+    const px = ex + s * r * spread + nx, py = ey + ny;
+    x.fillStyle = col;
+    x.beginPath(); x.ellipse(px, py, r * 0.84, ry, 0, 0, TAU); x.fill();
+    if (glint && blink < 0.45){
+      x.fillStyle = 'rgba(255,255,255,.7)';
+      x.beginPath(); x.arc(px - r*0.28, py - r*0.34, r*0.24, 0, TAU); x.fill();
+    }
+  }
+}
+
+/* ---------- ORBIT — ringed planet (unchanged from round 1) ---------- */
+function drawOrbit(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.9) * R * 0.05;
+  const sp = busy ? 2.4 : 1;
+  const tilt = -0.30 + Math.sin(t * 0.5) * 0.10;
+  const rx = R * 1.62, ry = R * 0.46, lw = R * 0.155;
+
+  x.save();
+  x.lineWidth = lw; x.lineCap = 'round';
+  x.strokeStyle = 'rgba(176,138,255,.38)';
+  x.beginPath(); x.ellipse(cx, cy, rx, ry, tilt, Math.PI, TAU); x.stroke();
+  x.restore();
+
+  let g = x.createRadialGradient(cx - R*0.34, cy - R*0.42, R*0.05, cx, cy, R*1.0);
+  g.addColorStop(0, '#DDC4FF'); g.addColorStop(0.42, '#9575F0'); g.addColorStop(1, '#472A9B');
+  x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R*0.94, 0, TAU); x.fill();
+
+  x.save();
+  x.beginPath(); x.arc(cx, cy, R*0.94, 0, TAU); x.clip();
+  x.fillStyle = 'rgba(255,255,255,.10)';
+  x.beginPath(); x.ellipse(cx, cy - R*0.32, R*0.98, R*0.13, -0.12, 0, TAU); x.fill();
+  x.beginPath(); x.ellipse(cx, cy + R*0.34, R*0.98, R*0.10, -0.10, 0, TAU); x.fill();
+  x.fillStyle = 'rgba(0,0,0,.13)';
+  x.beginPath(); x.ellipse(cx + R*0.1, cy + R*0.62, R*0.9, R*0.16, -0.08, 0, TAU); x.fill();
+  x.restore();
+
+  x.lineWidth = lw; x.lineCap = 'round';
+  x.strokeStyle = 'rgba(214,188,255,.95)';
+  x.beginPath(); x.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI); x.stroke();
+
+  const ma = t * 0.55 * sp;
+  const mx = cx + Math.cos(ma) * R * 1.52, my = cy + Math.sin(ma) * R * 1.40;
+  x.fillStyle = 'rgba(255,225,163,.95)';
+  x.beginPath(); x.arc(mx, my, R*0.13, 0, TAU); x.fill();
+
+  eyes(x, cx, cy - R*0.06, R*0.165, look, blink, '#F4EDFF', false, 1.6);
+}
+
+/* ---------- GYRO — sphere held in two crossed rings ---------- */
+function drawGyro(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.85) * R * 0.05;
+  const sp = busy ? 2.8 : 1;
+
+  const rings = [
+    { rx: R*1.34, ry: R*0.40, rot: -0.30 + Math.sin(t*0.52*sp) * 0.34, lw: R*0.072, back: .50, front: .92 },
+    { rx: R*1.03, ry: R*0.68, rot:  1.05 + Math.cos(t*0.43*sp) * 0.38, lw: R*0.060, back: .36, front: .74 },
+  ];
+
+  x.lineCap = 'round';
+  for (const g of rings){
+    x.lineWidth = g.lw;
+    x.strokeStyle = 'rgba(94,234,212,' + g.back + ')';
+    x.beginPath(); x.ellipse(cx, cy, g.rx, g.ry, g.rot, Math.PI, TAU); x.stroke();
+  }
+
+  let grd = x.createRadialGradient(cx - R*0.30, cy - R*0.34, R*0.04, cx, cy, R*0.66);
+  grd.addColorStop(0, '#EAFBF7'); grd.addColorStop(0.35, '#7FE3D2');
+  grd.addColorStop(0.75, '#2E9E93'); grd.addColorStop(1, '#123F3A');
+  x.fillStyle = grd; x.beginPath(); x.arc(cx, cy, R*0.62, 0, TAU); x.fill();
+
+  x.fillStyle = 'rgba(255,255,255,.62)';
+  x.beginPath(); x.ellipse(cx - R*0.21, cy - R*0.25, R*0.15, R*0.10, -0.5, 0, TAU); x.fill();
+
+  for (const g of rings){
+    x.lineWidth = g.lw;
+    x.strokeStyle = 'rgba(170,248,234,' + g.front + ')';
+    x.beginPath(); x.ellipse(cx, cy, g.rx, g.ry, g.rot, 0, Math.PI); x.stroke();
+  }
+
+  eyes(x, cx, cy - R*0.01, R*0.125, look, blink, '#0B2E2A', true, 1.55);
+}
+
+/* ---------- PULSAR — core with two sweeping beams ---------- */
+function drawPulsar(x, cx, cy, R, t, look, blink, busy){
+  const sp = busy ? 3.4 : 1;
+  const ang = t * 0.55 * sp;
+
+  let g = x.createRadialGradient(cx, cy, 0, cx, cy, R*1.7);
+  g.addColorStop(0, 'rgba(125,211,252,.40)');
+  g.addColorStop(0.45, 'rgba(96,165,250,.12)');
+  g.addColorStop(1, 'rgba(96,165,250,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R*1.7, 0, TAU); x.fill();
+
+  const len = R*2.6, spread = 0.26;
+  for (const d of [0, Math.PI]){
+    const a = ang + d;
+    const bg = x.createLinearGradient(cx, cy, cx + Math.cos(a)*len, cy + Math.sin(a)*len);
+    bg.addColorStop(0, 'rgba(224,246,255,.60)');
+    bg.addColorStop(0.4, 'rgba(140,205,255,.20)');
+    bg.addColorStop(1, 'rgba(120,180,255,0)');
+    x.fillStyle = bg;
+    x.beginPath(); x.moveTo(cx, cy);
+    x.lineTo(cx + Math.cos(a - spread)*len, cy + Math.sin(a - spread)*len);
+    x.lineTo(cx + Math.cos(a + spread)*len, cy + Math.sin(a + spread)*len);
+    x.closePath(); x.fill();
+  }
+
+  x.strokeStyle = 'rgba(190,230,255,.32)'; x.lineWidth = R*0.05;
+  x.beginPath(); x.ellipse(cx, cy, R*0.74, R*0.21, -0.25, 0, TAU); x.stroke();
+
+  const core = busy ? R*0.40 : R*0.33;
+  g = x.createRadialGradient(cx - R*0.08, cy - R*0.10, 0, cx, cy, core);
+  g.addColorStop(0, '#FFFFFF'); g.addColorStop(0.5, '#BFE4FF'); g.addColorStop(1, '#5BA8E8');
+  x.fillStyle = g; x.beginPath(); x.arc(cx, cy, core, 0, TAU); x.fill();
+
+  eyes(x, cx, cy, R*0.105, look, blink, '#0A2540', false, 1.5);
+}
+
+/* ---------- ECLIPSE — dark sphere with a waxing crescent ---------- */
+function drawEclipse(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.7) * R * 0.045;
+  const phase = busy ? 1 : (Math.sin(t * 0.40) + 1) / 2;
+
+  let g = x.createRadialGradient(cx, cy, R*0.8, cx, cy, R*1.8);
+  g.addColorStop(0, 'rgba(252,211,77,' + (0.08 + phase*0.30) + ')');
+  g.addColorStop(1, 'rgba(252,211,77,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R*1.8, 0, TAU); x.fill();
+
+  x.fillStyle = '#171227';
+  x.beginPath(); x.arc(cx, cy, R*0.95, 0, TAU); x.fill();
+
+  x.save();
+  x.beginPath(); x.arc(cx, cy, R*0.95, 0, TAU); x.clip();
+  const off = (1 - phase) * R * 1.85;
+  const lg = x.createRadialGradient(cx - off*0.6, cy, 0, cx - off*0.6, cy, R*1.75);
+  lg.addColorStop(0, '#FFF9E2'); lg.addColorStop(0.45, '#FFE08A');
+  lg.addColorStop(0.75, '#F5B942'); lg.addColorStop(1, 'rgba(240,160,60,0)');
+  x.fillStyle = lg; x.beginPath(); x.arc(cx - off, cy, R*0.95, 0, TAU); x.fill();
+  x.restore();
+
+  x.strokeStyle = 'rgba(255,225,150,.42)'; x.lineWidth = R*0.045;
+  x.beginPath(); x.arc(cx, cy, R*0.95, 0, TAU); x.stroke();
+
+  eyes(x, cx, cy, R*0.15, look, blink, 'rgba(23,18,39,' + (0.30 + phase*0.65) + ')', false, 1.6);
+  if (phase < 0.55){
+    x.globalAlpha = 0.55 - phase;
+    eyes(x, cx, cy, R*0.15, look, blink, 'rgba(255,238,190,.7)', false, 1.6);
+    x.globalAlpha = 1;
+  }
+}
+
+/* ---------- TERRA — wireframe globe, no ring ---------- */
+function drawTerra(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.68) * R * 0.04;
+  const sp = busy ? 2.2 : 1;
+  const rot = t * 0.30 * sp;
+
+  let g = x.createRadialGradient(cx - R*0.32, cy - R*0.36, R*0.05, cx, cy, R*0.98);
+  g.addColorStop(0, '#57E6B0'); g.addColorStop(0.5, '#12A87A'); g.addColorStop(1, '#04382E');
+  x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R*0.94, 0, TAU); x.fill();
+
+  x.save();
+  x.beginPath(); x.arc(cx, cy, R*0.94, 0, TAU); x.clip();
+  x.lineWidth = R*0.026;
+  for (let k = 0; k < 8; k++){
+    const phi = rot + k * Math.PI / 8;
+    const rx = Math.max(R*0.94 * Math.abs(Math.cos(phi)), R*0.012);
+    x.strokeStyle = 'rgba(200,255,232,.34)';
+    x.beginPath(); x.ellipse(cx, cy, rx, R*0.94, 0, 0, TAU); x.stroke();
+  }
+  x.strokeStyle = 'rgba(222,255,240,.62)'; x.lineWidth = R*0.032;
+  x.beginPath(); x.ellipse(cx, cy, R*0.94, R*0.94*0.30, 0, 0, TAU); x.stroke();
+  x.lineWidth = R*0.024;
+  for (const s of [1, -1]){
+    for (const c of [0.76, 0.46]){
+      x.strokeStyle = 'rgba(200,255,232,.24)';
+      x.beginPath();
+      x.ellipse(cx, cy - s*R*0.94*Math.sqrt(1 - c*c)*0.46, R*0.94*c, R*0.94*c*0.30, 0, 0, TAU);
+      x.stroke();
+    }
+  }
+  x.restore();
+
+  eyes(x, cx, cy, R*0.155, look, blink, '#DFFFF2', false, 1.6);
+}
+
+/* ---------- MOTE — tumbling asteroid with a moon ---------- */
+const ROCK = [1.00,0.93,1.04,0.90,0.97,1.06,0.91,0.99,1.03,0.94,1.01,0.96];
+
+function drawMote(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.62) * R * 0.06;
+  const spin = t * 0.16 * (busy ? 2.4 : 1);
+  const ma = t * 0.62 * (busy ? 2.2 : 1);
+  const mx = cx + Math.cos(ma) * R * 1.60;
+  const my = cy + Math.sin(ma) * R * 0.92;
+  const behind = Math.sin(ma) < 0;
+
+  const moon = () => {
+    const mg = x.createRadialGradient(mx - R*0.05, my - R*0.05, 0, mx, my, R*0.17);
+    mg.addColorStop(0, '#FFF3DC'); mg.addColorStop(1, '#BFA47C');
+    x.fillStyle = mg; x.beginPath(); x.arc(mx, my, R*0.15, 0, TAU); x.fill();
+  };
+  if (behind) moon();
+
+  x.save();
+  x.translate(cx, cy); x.rotate(spin);
+  x.beginPath();
+  for (let i = 0; i < ROCK.length; i++){
+    const a = i / ROCK.length * TAU, r = R * 0.84 * ROCK[i];
+    const px = Math.cos(a) * r, py = Math.sin(a) * r * 0.94;
+    if (i) x.lineTo(px, py); else x.moveTo(px, py);
+  }
+  x.closePath();
+  const g = x.createRadialGradient(-R*0.30, -R*0.34, R*0.05, 0, 0, R*1.0);
+  g.addColorStop(0, '#F2DAB9'); g.addColorStop(0.5, '#C9A47A'); g.addColorStop(1, '#5E452F');
+  x.fillStyle = g; x.fill();
+
+  x.fillStyle = 'rgba(88,62,40,.40)';
+  x.beginPath(); x.arc(-R*0.26, -R*0.09, R*0.16, 0, TAU); x.fill();
+  x.beginPath(); x.arc(R*0.23, R*0.17, R*0.105, 0, TAU); x.fill();
+  x.strokeStyle = 'rgba(255,240,215,.34)'; x.lineWidth = R*0.035;
+  x.beginPath(); x.arc(-R*0.26, -R*0.09, R*0.185, Math.PI*1.05, Math.PI*1.85); x.stroke();
+  x.restore();
+
+  if (!behind) moon();
+
+  eyes(x, cx, cy, R*0.13, look, blink, '#3A2A1B', true, 1.6);
+}
+
+/* ---------- VOID — black hole with an accretion disc ---------- */
+function drawVoid(x, cx, cy, R, t, look, blink, busy){
+  cy += Math.sin(t * 0.75) * R * 0.04;
+  const tilt = -0.16 + Math.sin(t * 0.42) * 0.06;
+  const rx = R * 1.75, ry = R * 0.34;
+  const bright = busy ? 1 : 0.66;
+
+  const disc = x.createLinearGradient(cx - rx, cy, cx + rx, cy);
+  disc.addColorStop(0, 'rgba(251,113,133,0)');
+  disc.addColorStop(0.5, 'rgba(253,186,116,' + (0.6 * bright) + ')');
+  disc.addColorStop(1, 'rgba(251,113,133,0)');
+
+  x.lineCap = 'round';
+  x.beginPath(); x.ellipse(cx, cy, rx, ry, tilt, Math.PI, TAU);
+  x.strokeStyle = disc; x.lineWidth = R*0.30; x.stroke();
+
+  x.beginPath(); x.ellipse(cx, cy, rx*0.60, ry*1.55, tilt, Math.PI, TAU);
+  x.strokeStyle = 'rgba(255,214,170,' + (0.42 * bright) + ')';
+  x.lineWidth = R*0.12; x.stroke();
+
+  x.fillStyle = '#08060E';
+  x.beginPath(); x.arc(cx, cy, R*0.92, 0, TAU); x.fill();
+
+  const ring = x.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  ring.addColorStop(0, 'rgba(255,228,184,.95)');
+  ring.addColorStop(0.5, 'rgba(255,168,116,.72)');
+  ring.addColorStop(1, 'rgba(255,228,184,.95)');
+  x.strokeStyle = ring; x.lineWidth = R*0.055;
+  x.beginPath(); x.arc(cx, cy, R*0.945, 0, TAU); x.stroke();
+
+  x.beginPath(); x.ellipse(cx, cy, rx, ry, tilt, 0, Math.PI);
+  x.strokeStyle = disc; x.lineWidth = R*0.30; x.stroke();
+
+  if (busy){
+    const jet = x.createLinearGradient(cx, cy - R*0.9, cx, cy - R*3.0);
+    jet.addColorStop(0, 'rgba(190,225,255,.55)');
+    jet.addColorStop(1, 'rgba(190,225,255,0)');
+    x.fillStyle = jet;
+    x.beginPath();
+    x.moveTo(cx - R*0.09, cy - R*0.85);
+    x.lineTo(cx, cy - R*3.0);
+    x.lineTo(cx + R*0.09, cy - R*0.85);
+    x.closePath(); x.fill();
+  }
+
+  eyes(x, cx, cy - R*0.05, R*0.115, look, blink, 'rgba(228,240,255,.94)', false, 1.5);
+}
+
+/* accA = accent on a light page, accB = accent on a dark page or in the island */
+const CREATURES = {
+  orbit:  { label:'Orbit',   accA:'#6D3BE0', accB:'#A78BFA', desc:'A ringed planet with a moon. The one you liked — unchanged, so it stays a fair comparison.', work:'moon speeds up',            traits:['ringed','calm','orbits'],    draw: drawOrbit },
+  gyro:   { label:'Gyro',    accA:'#0D9488', accB:'#5EEAD4', desc:'A glass sphere held inside two crossed rings. Reads as precision rather than wonder.',        work:'rings spin fast',           traits:['machine','precise','rings'], draw: drawGyro },
+  pulsar: { label:'Pulsar',  accA:'#1D74C9', accB:'#7DD3FC', desc:'A hot core throwing two beams like a lighthouse. The most obviously alive of the seven.',     work:'sweep accelerates',         traits:['beacon','sweeps','bright'],  draw: drawPulsar },
+  eclipse:{ label:'Eclipse', accA:'#A16207', accB:'#FCD34D', desc:'A dark sphere with a crescent that waxes and wanes. Its phase is its mood — full when busy.', work:'holds full',               traits:['phase','dark','waxes'],      draw: drawEclipse },
+  terra:  { label:'Terra',   accA:'#0F8A5F', accB:'#34D399', desc:'A wireframe globe with no ring at all. Pure geometry — the quietest thing here.',             work:'spins faster',              traits:['grid','clean','spins'],      draw: drawTerra },
+  mote:   { label:'Mote',    accA:'#8F6236', accB:'#E0B080', desc:'A small cratered rock turning over, with one moon. Rougher and less polished than the rest.', work:'moon speeds up',            traits:['rough','tumbles','rock'],    draw: drawMote },
+  void:   { label:'Void',    accA:'#B93A56', accB:'#FB7185', desc:'A black hole with a glowing disc and a lensed rim. The most dramatic, and the darkest.',     work:'disc brightens, jet fires', traits:['dramatic','lensed','glows'], draw: drawVoid },
+};
+
+/* ============================================================
+   Canvas rig
+   ============================================================ */
+const rig = [];
+function attach(canvas, kind, opts){
+  const c = { el: canvas, x: canvas.getContext('2d'), kind, opts: opts || {},
+              look:{x:0,y:0}, blink:0, blinkT:0, nextBlink: 1 + Math.random()*3,
+              busy:false, rect:null };
+  rig.push(c);
+  return c;
+}
+
+function measure(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  for (const c of rig){
+    const r = c.el.getBoundingClientRect();
+    c.rect = r;
+    if (r.width < 4) continue;
+    c.w = r.width; c.h = r.height;
+    c.el.width = Math.round(r.width * dpr);
+    c.el.height = Math.round(r.height * dpr);
+  }
+}
+
+let pointer = { x:-1e4, y:-1e4 };
+addEventListener('pointermove', e => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive:true });
+addEventListener('pointerleave', () => { pointer.x = -1e4; pointer.y = -1e4; });
+addEventListener('scroll', () => { for (const c of rig) c.rect = c.el.getBoundingClientRect(); }, { passive:true });
+
+function step(dt, t){
+  for (const c of rig){
+    if (!c.w) continue;
+
+    c.nextBlink -= dt;
+    if (c.nextBlink <= 0){ c.blinkT = 0.17; c.nextBlink = 2 + Math.random() * 4.5; }
+    if (c.blinkT > 0){ c.blinkT -= dt; c.blink = Math.sin(Math.max(0, c.blinkT) / 0.17 * Math.PI); }
+    else c.blink = 0;
+
+    const r = c.rect || c.el.getBoundingClientRect();
+    const mx = r.left + r.width/2, my = r.top + r.height/2;
+    const dx = pointer.x - mx, dy = pointer.y - my;
+    let tx, ty;
+    if (Math.hypot(dx, dy) < Math.max(innerWidth, innerHeight) * 0.8){
+      tx = Math.max(-1, Math.min(1, dx / (r.width * 0.9)));
+      ty = Math.max(-1, Math.min(1, dy / (r.height * 0.9)));
+    } else {
+      tx = Math.sin(t * 0.4) * 0.42; ty = Math.sin(t * 0.31) * 0.28;
+    }
+    c.look.x += (tx - c.look.x) * Math.min(1, dt * 6);
+    c.look.y += (ty - c.look.y) * Math.min(1, dt * 6);
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const R = Math.min(c.w, c.h) * (c.opts.scale || 0.30);
+    c.x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.x.clearRect(0, 0, c.w, c.h);
+    CREATURES[c.kind].draw(c.x, c.w/2, c.h/2, R, t + (c.opts.phase || 0), c.look, c.blink, c.busy);
+  }
+}
+
+const motionOK = !reduced;
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  step(dt, now / 1000);
+  requestAnimationFrame(loop);
+}
+
+/* ============================================================
+   Gallery
+   ============================================================ */
+const petsEl = $('#pets');
+let chosen = 'orbit';
+
+function selectPet(key){
+  chosen = key;
+  const root = document.documentElement.style;
+  root.setProperty('--acc-a', CREATURES[key].accA);
+  root.setProperty('--acc-b', CREATURES[key].accB);
+  for (const el of petsEl.children){
+    const on = el.dataset.k === key;
+    el.setAttribute('aria-pressed', String(on));
+    $('.pick', el).textContent = on ? 'In the island' : 'Use this one';
+  }
+  islePet.kind = key;
+  $('#capname').textContent = CREATURES[key].label;
+  render();
+}
+
+for (const [key, def] of Object.entries(CREATURES)){
+  const b = document.createElement('button');
+  b.className = 'pet'; b.type = 'button'; b.dataset.k = key;
+  b.setAttribute('aria-pressed', String(key === chosen));
+  b.innerHTML =
+    '<canvas></canvas>' +
+    '<span class="petname">' + def.label + '</span>' +
+    '<span class="petdesc">' + def.desc + '</span>' +
+    '<span class="petwork">busy → ' + def.work + '</span>' +
+    '<span class="pettraits">' + def.traits.map(x => '<span class="trait">' + x + '</span>').join('') + '</span>' +
+    '<span class="pick">' + (key === chosen ? 'In the island' : 'Use this one') + '</span>';
+  b.addEventListener('click', () => selectPet(key));
+  petsEl.appendChild(b);
+  attach($('canvas', b), key, { scale: 0.31, phase: Math.random() * 2 });
+}
+
+const islePet = attach($('#islepet'), chosen, { scale: 0.30, phase: 1.3 });
+
+/* ============================================================
+   Tiles & panels
+   ============================================================ */
+const G = {
+  git:  '<circle cx="5" cy="4.4" r="1.9"/><circle cx="5" cy="14.6" r="1.9"/><circle cx="14" cy="7.4" r="1.9"/><path d="M5 6.3v6.4M6.9 4.4h3.6a2.5 2.5 0 0 1 2.5 2.5v.5"/>',
+  gh:   '<path d="M10 2.2A7.3 7.3 0 0 0 7.7 16.4c.36.06.5-.16.5-.35v-1.3c-2 .44-2.44-.96-2.44-.96-.33-.84-.8-1.06-.8-1.06-.66-.45.05-.44.05-.44.73.05 1.1.75 1.1.75.65 1.1 1.7.78 2.1.6.07-.47.26-.79.46-.97-1.6-.18-3.3-.8-3.3-3.58 0-.79.29-1.44.75-1.94-.08-.19-.33-.93.07-1.93 0 0 .61-.2 2 .75a6.9 6.9 0 0 1 3.64 0c1.39-.95 2-.75 2-.75.4 1 .15 1.74.08 1.93.47.5.75 1.15.75 1.94 0 2.79-1.7 3.4-3.32 3.57.26.23.5.67.5 1.36v2c0 .2.13.42.5.35A7.3 7.3 0 0 0 10 2.2Z"/>',
+  cal:  '<rect x="2.5" y="4" width="15" height="13.5" rx="2.5"/><path d="M2.5 8h15M6 2.2v3.4M14 2.2v3.4M6.2 11.6h2.2M11.6 11.6h2.2"/>',
+  more: '<circle cx="4.4" cy="10" r="1.3"/><circle cx="10" cy="10" r="1.3"/><circle cx="15.6" cy="10" r="1.3"/>',
+};
+const HUES = { git:'var(--c-git)', gh:'var(--c-gh)', cal:'var(--c-cal)', more:'var(--fg-3)' };
+const TILES = ['git', 'gh', 'cal', 'ryfe'];
+
+const tilesEl = $('#tiles');
+let active = 'git';
+for (const k of TILES){
+  const b = document.createElement('button');
+  b.className = 'tile'; b.type = 'button'; b.dataset.k = k;
+  b.style.color = k === 'ryfe' ? 'var(--acc)' : HUES[k];
+  b.setAttribute('aria-label', k);
+  b.setAttribute('aria-pressed', String(k === active));
+  b.innerHTML = k === 'ryfe'
+    ? '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="3.2"/><ellipse cx="10" cy="10" rx="8.2" ry="2.6" transform="rotate(-22 10 10)"/></svg>'
+    : '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + G[k] + '</svg>';
+  b.addEventListener('click', e => { e.stopPropagation(); active = k; open(true); render(); });
+  tilesEl.appendChild(b);
+}
+
+function row(lead, t1, t2, chip, kind){
+  return '<div class="row">' +
+    (lead ? '<span class="lead">' + lead + '</span>' : '') +
+    '<span class="grow"><span class="t1">' + t1 + '</span>' + (t2 ? '<span class="t2">' + t2 + '</span>' : '') + '</span>' +
+    (chip ? '<span class="chip ' + (kind || '') + '">' + chip + '</span>' : '') + '</div>';
+}
+function head(title, meta){ return '<div class="bodyhead"><span class="bodytitle"><span class="disc"></span>' + title + '</span><span class="bodymeta">' + meta + '</span></div>'; }
+
+const PANELS = {
+  git: () => head('Git', '7 repos found') +
+    '<div class="gitbar">' +
+      '<span class="repo"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + G.git + '</svg>elezen_ryfe-github / ryfe</span>' +
+      '<span class="chip">main</span><span class="chip">↑2 ahead</span><span class="chip">+142 −18</span>' +
+    '</div>' +
+    row('', 'island/pet.ts', 'modified', '<span class="add">+38</span> <span class="del">−6</span>') +
+    row('', 'src-tauri/git.rs', 'modified', '<span class="add">+104</span> <span class="del">−0</span>') +
+    row('', 'design/prototype.html', 'new file', '<span class="add">+2,310</span>') +
+    '<div class="commitrow"><input id="commitmsg" type="text" autocomplete="off" placeholder="Commit message — or let it draft one from the diff"><button class="btn" id="commitbtn">Commit &amp; push</button></div>' +
+    '<div class="hintline" id="githint">Will run: git add -A &amp;&amp; git commit &amp;&amp; git push origin main</div>',
+
+  gh: () => head('GitHub', '@elezen-ryfe · 3 open') +
+    row('', 'ryfe #42 — Add the git panel', 'CI passing · 2 approvals', 'ready', 'good') +
+    row('', 'jobtailor #17 — Fix parser', 'CI running · 4m 12s', 'running', 'hot') +
+    row('', 'coucou #8 — Bump deps', 'Review requested from you', 'review', 'hot') +
+    '<div class="hintline">Polled every 5 min, every 60s while a check is running.</div>',
+
+  cal: () => head('Calendar', 'Thu 10 Oct · 3 events') +
+    row('09:30', 'Standup', 'Meet · 15 min', 'now', 'hot') +
+    row('14:00', 'Dentist', 'Clinic on Oak St · 45 min', '') +
+    row('16:30', 'Review — v2 ship', 'With Dana · Meet', '') +
+    '<div class="hintline">Try: "move my 2pm to 4" · "what does my week look like"</div>',
+
+  ryfe: () => head('Ryfe', 'deepseek-flash · thinking off') +
+    '<div class="chat">' +
+      '<span class="bub me">what changed in coucou today?</span>' +
+      '<span class="tool"><span class="dot"></span>git_status · elezen_ryfe-github/coucou · 4 files</span>' +
+      '<span class="bub bot">Four files changed. The README gained a Windows build note, and windows/src/style.css picked up 38 lines of pill styling. Nothing committed yet.</span>' +
+      '<span class="bub me">commit it</span>' +
+      '<span class="tool"><span class="dot"></span>waiting for you — proposal ready</span>' +
+    '</div>' +
+    '<div class="chatrow"><input id="chatinput" type="text" autocomplete="off" placeholder="Ask, or say what to do…"><button class="btn ghost">Think harder</button></div>',
+};
+
+const bodyEl = $('#islebody');
+let draft = '';
+function render(){
+  const html = PANELS[active]();
+  bodyEl.innerHTML = html;
+  if (active === 'git'){
+    const inp = $('#commitmsg');
+    inp.value = draft;
+    inp.addEventListener('input', () => { draft = inp.value; });
+    wireCommit();
+  }
+  for (const t of tilesEl.children) t.setAttribute('aria-pressed', String(t.dataset.k === active));
+}
+
+const isle = $('#isle');
+function open(on){
+  isle.dataset.open = String(on);
+  bodyEl.hidden = !on;
+  $('#cap').setAttribute('aria-expanded', String(on));
+}
+
+$('#cap').addEventListener('click', () => open(isle.dataset.open !== 'true'));
+
+function wireCommit(){
+  const btn = $('#commitbtn'), inp = $('#commitmsg'), hint = $('#githint');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const msg = (inp.value || 'Update the git panel and island prototype').trim();
+    btn.disabled = true; btn.textContent = 'Working…';
+    hint.innerHTML = 'Running: <span class="mono">git commit -m "' + msg.replace(/[<>&"]/g, '') + '"</span>';
+    setTimeout(() => {
+      hint.innerHTML = '<span style="color:#5FE3B4">✓ preview only — nothing ran.</span> A real build shows the command, runs it, then streams the output here.';
+      btn.textContent = 'Pushed';
+    }, 900);
+  });
+}
+
+/* ============================================================
+   Capability cards
+   ============================================================ */
+const RYFE_GLYPH = '<circle cx="10" cy="10" r="3.2"/><ellipse cx="10" cy="10" rx="8.2" ry="2.6" transform="rotate(-22 10 10)"/>';
+function svgFor(k){
+  return '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+    (k === 'ryfe' ? RYFE_GLYPH : G[k]) + '</svg>';
+}
+function cap(k, title, items, wide){
+  const hue = k === 'ryfe' ? 'var(--acc)' : HUES[k];
+  const tint = 'color-mix(in oklab, ' + hue + ' 18%, transparent)';
+  return '<div class="capcard' + (wide ? ' wide' : '') + '">' +
+    '<div class="caphead"><span class="disc" style="background:' + tint + ';color:' + hue + '">' + svgFor(k) + '</span>' +
+    '<h3>' + title + '</h3></div>' +
+    '<ul class="caplist">' + items.map(i => '<li>' + i + '</li>').join('') + '</ul></div>';
+}
+
+$('#caps').innerHTML = [
+  cap('git', 'Git, on every repo you have', [
+    'Finds all seven under elezen_ryfe-github, including the one nested in transcriber/frontend.',
+    'Status, diff, log, stage, commit, push, pull, branch and stash — from the island or a shortcut.',
+    'Drafts the commit message from the diff. It is text in a box you own, never something it sends.',
+    'Shows the exact command first, then runs it and streams the output back line by line.',
+    'Force-push and reset --hard make you type the repo name. Branch deletion and checkout . too.',
+  ]),
+  cap('gh', 'GitHub', [
+    'Your open PRs with their CI state, review requests, and the default branch of your recent repos.',
+    'A badge and a sound the moment a check goes red or green.',
+    'Issues and comments from a thought, without opening a browser.',
+  ]),
+  cap('cal', 'Google Calendar', [
+    'What is next and how long until it, right in the collapsed capsule.',
+    '"Move my 2pm to 4", "find me an hour with Dana this week".',
+    'Flags a double-booking before it happens. Reads your week on Monday.',
+  ]),
+  cap('ryfe', 'DeepSeek, with hands', [
+    'Reads your repos, PRs and calendar through tools rather than guessing from a prompt.',
+    'Anything that writes — a commit, a push, a new event — arrives as a card you click, not an action.',
+    'Model list read from the API at startup, so a retired model name can never break the app.',
+    'Thinking off by default for fast answers, with a per-message toggle when a question deserves it.',
+  ]),
+  cap('more', 'Still to come', [
+    'Gmail triage and drafted replies. Google Drive. Watching local folders. YouTube. Photos.',
+    'And whatever else goes on the list — this is the starting set, not the whole one.',
+  ], true),
+].join('');
+
+/* ============================================================
+   Boot
+   ============================================================ */
+selectPet(chosen);          // also renders, and publishes the accent pair
+measure();
+addEventListener('resize', measure);
+
+if (motionOK) requestAnimationFrame(loop);
+else step(0, 1.4);          // one still frame
+
+// let a few characters show their busy state on hover, so it is visible without a live app
+for (const el of petsEl.children){
+  const c = rig.find(r => r.el === $('canvas', el));
+  if (!c) continue;
+  el.addEventListener('pointerenter', () => { c.busy = true; });
+  el.addEventListener('pointerleave', () => { c.busy = false; });
+}
+
+// the island's own character is permanently "busy" in the preview so you can see the difference
+islePet.busy = true;
+
+})();
+</script>

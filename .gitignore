@@ -1,0 +1,9 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+assets/icon-source.png
+*.log
+
+# Screenshots taken by scripts/*.ps1 while developing.
+.shots/

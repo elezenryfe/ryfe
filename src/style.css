@@ -1,0 +1,611 @@
+/* ============================================================
+   RYFE — the island
+   The window is transparent and always on top. Everything outside
+   `#island` is see-through, and Rust makes it click-through too.
+
+   The island is a black shape hanging off the top edge of the screen:
+   square where it meets the screen, rounded at the bottom, so it reads
+   as part of the display rather than a card floating near it.
+   ============================================================ */
+
+:root {
+  /* Pulsar's accent. JS overwrites both if a different character is chosen. */
+  --acc-a: #1d74c9;
+  --acc-b: #3b9eff;
+  --acc: var(--acc-b);
+  --acc-dim: color-mix(in oklab, var(--acc) 30%, transparent);
+  --acc-tint: color-mix(in oklab, var(--acc) 12%, transparent);
+
+  /* The island is black and the cards sit on it. */
+  --i-1: #000;
+  --i-2: #141518;
+  --i-3: #1d1f23;
+  --i-fg: #f5f6f8;
+  --i-fg-2: #9398a1;
+  --i-fg-3: #6b7079;
+  --i-line: rgba(255, 255, 255, 0.075);
+  --i-line-2: rgba(255, 255, 255, 0.035);
+
+  --ok: #34d399;
+  --bad: #ff8d97;
+
+  --c-git: #f5a524;
+  --c-gh: #9398a1;
+  --c-cal: #22d3ee;
+
+  /* One family, the one the machine already uses for its own interface. */
+  --font-ui: system-ui, 'Segoe UI Variable Text', 'Segoe UI', 'Segoe UI Emoji',
+    'Nirmala UI', 'Microsoft YaHei UI', sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--i-fg);
+  -webkit-font-smoothing: antialiased;
+  /* Nothing here is text the user should be able to select; a stray drag on an
+     overlay window feels broken. */
+  user-select: none;
+  cursor: default;
+}
+
+/* What is left of the island while it is hidden. Zero pixels tall, so this is
+   the only thing the cursor can land on — and the only way back. */
+#wake {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  height: 6px;
+}
+
+/* ---------- the island ---------- */
+
+/* Width, height and radius are written by JS every frame: the box is animated,
+   and the window behind it is resized to match once it has settled. */
+#island {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--i-1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 0;
+  will-change: width, height;
+}
+
+#glow {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* Positioned by JS: the character stands in the header while the island is a
+   strip, and in the gutter beside the content once it opens. */
+#pet {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  pointer-events: none;
+}
+
+/* Collapsed: the header only, and in the hidden case not even that — the island
+   is on its way to no height at all. */
+#island[data-mode='compact'] .panel,
+#island[data-mode='hidden'] .cap,
+#island[data-mode='hidden'] .panel {
+  display: none;
+}
+
+/* ---------- the resize grip ---------- */
+
+/* Bottom-right corner. Only the open island has a panel worth resizing, and the
+   file list inside it is what grows — everything below it is a fixed height, and
+   the list is what is left. */
+#grip {
+  position: absolute;
+  z-index: 3;
+  /* Clear of the rounded corner, which would otherwise clip it. */
+  right: 8px;
+  bottom: 8px;
+  width: 18px;
+  height: 18px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--i-fg-3);
+  opacity: 0;
+  cursor: nwse-resize;
+  transition: opacity 0.15s ease;
+  touch-action: none;
+}
+
+#island[data-mode='open'] #grip { display: flex; }
+#island:hover #grip { opacity: 0.5; }
+/* Same weight as the rule above, and later, so hovering the grip itself wins. */
+#island #grip:hover { opacity: 1; }
+
+/* ---------- the header ---------- */
+
+.cap {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* The left inset is the character's slot. It is the same in both modes so
+     nothing in the header moves when the island opens — only the island does. */
+  padding: 0 8px 0 68px;
+}
+
+.capmain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.capname {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.capsub {
+  font-size: 11.5px;
+  color: var(--i-fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tiles { display: flex; gap: 4px; flex: none; }
+
+.tile {
+  appearance: none;
+  padding: 0;
+  cursor: pointer;
+  width: 30px;
+  height: 22px;
+  border-radius: 99px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--i-fg-2);
+  transition: color 0.15s, background 0.15s;
+}
+
+.tile:hover { color: #b0b5be; background: rgba(255, 255, 255, 0.06); }
+.tile[aria-pressed='true'] { color: var(--i-fg); background: var(--i-3); }
+.tile svg { width: 15px; height: 15px; display: block; }
+
+.caret,
+.iconbtn {
+  appearance: none;
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--i-fg-3);
+  transition: transform 0.25s, color 0.15s, background 0.15s;
+}
+
+.caret:hover,
+.iconbtn:hover { color: var(--i-fg); background: var(--i-3); }
+
+#island[data-mode='open'] .caret { transform: rotate(180deg); }
+
+/* ---------- the panel ---------- */
+
+/* No card of its own: the content sits straight on the island, and the rows
+   inside it are what have edges. */
+.panel {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  padding: 6px 10px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.panel[hidden] { display: none !important; }
+
+/* Open: the content clears the gutter the character stands in. Its body is
+   1.14R either side of the centre at x=68, plus a gap. */
+#island[data-mode='open'] .panel { padding-left: 112px; }
+
+.bodyhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.bodytitle {
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bodytitle .disc {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--acc);
+}
+
+.bodymeta { font-family: var(--font-mono); font-size: 11px; color: var(--i-fg-3); }
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--i-3) transparent;
+}
+
+.scroll::-webkit-scrollbar { width: 8px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--i-3); border-radius: 99px; }
+
+/* ---------- rows ---------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  background: var(--i-2);
+  border: 1px solid var(--i-line-2);
+  border-radius: 13px;
+  flex: none;
+}
+
+.row .lead {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--i-fg-2);
+  width: 50px;
+}
+
+.row .grow { flex: 1; min-width: 0; }
+
+.row .t1 {
+  display: block;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row .t2 {
+  display: block;
+  font-size: 11.5px;
+  color: var(--i-fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row.clickable { cursor: pointer; transition: background 0.14s; }
+.row.clickable:hover { background: var(--i-3); }
+
+.chip {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: var(--i-3);
+  color: var(--i-fg-2);
+  border: 1px solid var(--i-line);
+}
+
+.chip.hot { color: var(--acc); border-color: var(--acc-dim); background: var(--acc-tint); }
+.chip.good { color: var(--ok); border-color: rgba(52, 211, 153, 0.28); background: rgba(52, 211, 153, 0.09); }
+.chip.bad { color: var(--bad); border-color: rgba(255, 141, 151, 0.28); background: rgba(255, 141, 151, 0.09); }
+
+.add { color: var(--ok); }
+.del { color: var(--bad); }
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--i-fg-3);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 20px;
+}
+
+.empty strong { color: var(--i-fg-2); font-weight: 600; }
+
+/* ---------- git ---------- */
+
+.gitbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; }
+
+.repo {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--i-2);
+  border: 1px solid var(--i-line);
+  border-radius: 9px;
+  padding: 5px 9px;
+  color: var(--i-fg-2);
+}
+
+.commitrow { display: flex; gap: 8px; align-items: center; flex: none; }
+
+input[type='text'],
+input[type='password'] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--i-fg);
+  background: var(--i-2);
+  border: 1px solid var(--i-line);
+  border-radius: 11px;
+  padding: 9px 12px;
+  outline: none;
+  user-select: text;
+}
+
+input[type='text']::placeholder,
+input[type='password']::placeholder { color: var(--i-fg-3); }
+
+input[type='text']:focus,
+input[type='password']:focus { border-color: var(--acc-dim); }
+
+.btn {
+  appearance: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 11px;
+  padding: 9px 15px;
+  border: 1px solid transparent;
+  flex: none;
+  background: var(--acc);
+  color: #06182b;
+  transition: filter 0.15s;
+}
+
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.5; cursor: default; filter: none; }
+.btn.ghost { background: var(--i-2); border-color: var(--i-line); color: var(--i-fg-2); }
+.btn.ghost:hover { filter: none; background: var(--i-3); color: var(--i-fg); }
+
+.hintline {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--i-fg-3);
+  flex: none;
+  word-break: break-all;
+  user-select: text;
+}
+
+/* ---------- chat ---------- */
+
+.chat { display: flex; flex-direction: column; gap: 8px; }
+
+.bub {
+  max-width: 88%;
+  font-size: 13px;
+  padding: 8px 11px;
+  border-radius: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.bub.me { align-self: flex-end; background: var(--i-3); border: 1px solid var(--i-line); border-bottom-right-radius: 5px; }
+.bub.bot { align-self: flex-start; background: var(--i-2); border: 1px solid var(--i-line-2); border-bottom-left-radius: 5px; }
+.bub.err { align-self: flex-start; background: rgba(255, 141, 151, 0.09); border: 1px solid rgba(255, 141, 151, 0.28); color: var(--bad); }
+
+.tool {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--i-fg-3);
+}
+
+.tool .dot { width: 5px; height: 5px; border-radius: 99px; background: var(--ok); }
+.tool.busy .dot { background: var(--acc); animation: pulse 1s ease-in-out infinite; }
+
+@keyframes pulse { 50% { opacity: 0.25; } }
+
+/* The button that is running: its label is replaced by this. */
+.spin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  vertical-align: -1px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklab, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- diff ---------- */
+
+pre.diff {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  background: #0e0f11;
+  border: 1px solid var(--i-line-2);
+  border-radius: 13px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre;
+  user-select: text;
+  color: var(--i-fg-2);
+}
+
+/* ---------- contribution sparkline ---------- */
+
+.spark {
+  flex: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  padding: 9px 11px;
+  background: var(--i-2);
+  border: 1px solid var(--i-line-2);
+  border-radius: 13px;
+}
+
+.spark i {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  min-width: 5px;
+}
+
+/* ---------- settings view ---------- */
+
+.set {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px 13px;
+  background: var(--i-2);
+  border: 1px solid var(--i-line-2);
+  border-radius: 13px;
+}
+
+.set h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.setfield { display: flex; flex-direction: column; gap: 5px; }
+
+.setfield label { font-size: 12.5px; color: var(--i-fg-2); }
+
+.setrow { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.setrow .btn { padding: 7px 12px; font-size: 12.5px; }
+
+.setnote {
+  font-size: 11.5px;
+  color: var(--i-fg-3);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.setnote strong { color: var(--i-fg-2); font-weight: 600; }
+
+.setstatus { font-family: var(--font-mono); font-size: 11px; color: var(--i-fg-3); }
+.setstatus.ok { color: var(--ok); }
+.setstatus.err { color: var(--bad); }
+
+.settoggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settoggle input { width: 15px; height: 15px; accent-color: var(--acc); flex: none; }
+
+textarea {
+  font: inherit;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  color: var(--i-fg);
+  background: #0e0f11;
+  border: 1px solid var(--i-line);
+  border-radius: 10px;
+  padding: 8px 11px;
+  outline: none;
+  width: 100%;
+  resize: vertical;
+  user-select: text;
+}
+
+textarea:focus { border-color: var(--acc-dim); }
+
+select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--i-fg);
+  background: var(--i-2);
+  border: 1px solid var(--i-line);
+  border-radius: 10px;
+  padding: 7px 10px;
+  outline: none;
+  cursor: pointer;
+}
+
+select:focus { border-color: var(--acc-dim); }
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
