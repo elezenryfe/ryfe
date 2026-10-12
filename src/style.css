@@ -462,6 +462,77 @@ input[type='password']:focus { border-color: var(--acc-dim); }
   color: var(--i-fg-3);
 }
 
+/* A proposed file: the path, the text, then the button that writes it. */
+.prop {
+  align-self: flex-start;
+  max-width: 92%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  background: var(--i-2);
+  border: 1px solid var(--i-line-2);
+  border-radius: 13px;
+  border-bottom-left-radius: 5px;
+}
+
+.prophead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--i-fg);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* On a card, the quiet button has to be a step off the card's own colour
+   rather than the same one — otherwise all that is left of it is its text. */
+.prop .btn.ghost { background: var(--i-3); }
+
+.propbody {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--i-fg-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  scrollbar-width: thin;
+  scrollbar-color: var(--i-3) transparent;
+}
+
+.propbody::-webkit-scrollbar { width: 8px; }
+.propbody::-webkit-scrollbar-thumb { background: var(--i-3); border-radius: 99px; }
+
+.hintline.bad { color: var(--bad); }
+
+/* The folded-up record of what the model did to get to an answer. */
+.steps { display: flex; flex-direction: column; gap: 6px; align-self: flex-start; max-width: 96%; }
+
+.stepshead {
+  appearance: none;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--i-fg-3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.stepshead:hover { color: var(--i-fg-2); }
+
 .tool .dot { width: 5px; height: 5px; border-radius: 99px; background: var(--ok); }
 .tool.busy .dot { background: var(--acc); animation: pulse 1s ease-in-out infinite; }
 

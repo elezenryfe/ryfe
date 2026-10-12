@@ -11,7 +11,7 @@
 //! caller to echo back the repository's own folder name. That check lives here,
 //! in Rust, not in the UI — a UI check is a suggestion, this one is a wall.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
@@ -461,6 +461,19 @@ fn argv_for(action: &str, args: &[String]) -> Option<(Vec<String>, Risk)> {
             // the pair below performs.
             (vec![s("commit"), s("-a"), s("-m"), s(msg)], Risk::Write)
         }
+        "commit_file" => {
+            // A pathspec commit: only this file's contents go in, so whatever
+            // the user had staged themselves cannot ride along with it.
+            let msg = need(args, 0)?;
+            let path = need(args, 1)?;
+            if msg.trim().is_empty() {
+                return None;
+            }
+            (
+                vec![s("commit"), s("-m"), s(msg), s("--"), s(path)],
+                Risk::Write,
+            )
+        }
         "init" => (vec![s("init"), s("-b"), s("main")], Risk::Write),
         "remote_add" => {
             // https only: `ext::sh -c …` is a real git transport, and a stored
@@ -510,6 +523,85 @@ fn require_repo(repo: &str) -> Result<PathBuf, String> {
         return Err(format!("{repo} is not a git repository"));
     }
     Ok(p)
+}
+
+/// Resolves a repository-relative path, refusing anything that leaves it.
+///
+/// The model supplies these paths, so they are treated as hostile: a drive, a
+/// `..` or a `.git` component is refused rather than normalised away, and a
+/// leading `-` never gets the chance to become a flag.
+fn inside_repo(repo: &str, rel: &str) -> Result<PathBuf, String> {
+    let root = require_repo(repo)?;
+    let path = Path::new(rel);
+    if rel.trim().is_empty() || rel.starts_with('-') || rel.contains('\0') {
+        return Err(format!("'{rel}' is not a path inside the repository"));
+    }
+    for part in path.components() {
+        match part {
+            Component::CurDir => {}
+            Component::Normal(name) if name.to_str() != Some(".git") => {}
+            _ => {
+                return Err(format!(
+                    "'{rel}' has to be a plain path inside the repository"
+                ))
+            }
+        }
+    }
+    let target = root.join(path);
+    // A path can be inside the repository and still lead out of it, if the file
+    // or the folder it goes in is a link. Only the two that are about to be
+    // touched are resolved; deeper ones cannot be reached by this write anyway.
+    let real_root = root
+        .canonicalize()
+        .map_err(|e| format!("could not open {repo}: {e}"))?;
+    let parent = target.parent().unwrap_or(target.as_path());
+    for candidate in [target.as_path(), parent] {
+        if let Ok(real) = candidate.canonicalize() {
+            if !real.starts_with(&real_root) {
+                return Err(format!("'{rel}' points outside the repository"));
+            }
+        }
+    }
+    Ok(target)
+}
+
+/// How big the file at a repository-relative path already is, or None when
+/// there is no such file. Used to say "this replaces something" on the approval
+/// card, so a name the user already has never looks like a new file.
+pub fn existing_size(repo: &str, rel: &str) -> Option<u64> {
+    let path = inside_repo(repo, rel).ok()?;
+    let meta = std::fs::metadata(path).ok()?;
+    if meta.is_file() {
+        Some(meta.len())
+    } else {
+        None
+    }
+}
+
+/// The largest file the assistant is allowed to read. A lockfile or a bundle is
+/// not something it can use, and reading one would cost more than the answer.
+const MAX_READ: u64 = 128 * 1024;
+
+/// Reads a text file from inside a repository, for the assistant's tools.
+pub fn read_text(repo: &str, rel: &str) -> Result<String, String> {
+    let path = inside_repo(repo, rel)?;
+    let meta = std::fs::metadata(&path).map_err(|e| format!("could not open {rel}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{rel} is not a file"));
+    }
+    if meta.len() > MAX_READ {
+        return Err(format!(
+            "{rel} is {} KB — too big to read",
+            meta.len() / 1024
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("could not read {rel}: {e}"))?;
+    // A NUL in the first block is the usual way a binary announces itself, and
+    // its "text" would be noise in the conversation.
+    if bytes.contains(&0) {
+        return Err(format!("{rel} looks like a binary file"));
+    }
+    Ok(truncate(String::from_utf8_lossy(&bytes).to_string()))
 }
 
 // ---------------------------------------------------------------------------
@@ -584,6 +676,61 @@ pub async fn git_diff(repo: String, path: Option<String>, staged: bool) -> Resul
     })
     .await
     .map_err(|e| format!("diff failed: {e}"))?
+}
+
+/// A file the assistant wrote, after the user approved it.
+#[derive(Serialize, Clone, Debug)]
+pub struct WrittenFile {
+    pub path: String,
+    pub bytes: u32,
+    /// True when something was already there and has now been replaced.
+    pub replaced: bool,
+}
+
+/// Writes one file that the user has approved on a card.
+///
+/// The approval lives in the webview; what lives here is the leash. The path
+/// has to resolve inside a repository, `.git` is off limits, and a file that
+/// holds secrets by convention is refused however it was asked for.
+#[tauri::command]
+pub async fn file_write(
+    repo: String,
+    path: String,
+    content: String,
+) -> Result<WrittenFile, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        const MAX_WRITE: usize = 256 * 1024;
+        if content.len() > MAX_WRITE {
+            return Err(format!(
+                "that is {} KB of text — too much to write from here",
+                content.len() / 1024
+            ));
+        }
+        let target = inside_repo(&repo, &path)?;
+        if is_env(&path) {
+            return Err(format!(
+                "{path} holds secrets by convention — Ryfe will not write it"
+            ));
+        }
+        if target.is_dir() {
+            return Err(format!("{path} is a folder"));
+        }
+        // A file that is already there is replaced, not appended to — and the
+        // caller is told which it was, so the conversation can say so.
+        let replaced = target.exists();
+        if let Some(dir) = target.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("could not make the folder: {e}"))?;
+        }
+        std::fs::write(&target, content.as_bytes())
+            .map_err(|e| format!("could not write {path}: {e}"))?;
+        Ok(WrittenFile {
+            path,
+            bytes: content.len() as u32,
+            replaced,
+        })
+    })
+    .await
+    .map_err(|e| format!("write failed: {e}"))?
 }
 
 /// What connecting this folder would publish, asked before anything is staged.
@@ -874,6 +1021,53 @@ mod tests {
             &empty,
         );
         assert!(some.has_commits);
+    }
+
+    /// The model supplies these paths, so the leash is what matters: only a
+    /// plain path that stays inside the repository gets through.
+    #[test]
+    fn a_path_that_leaves_the_repository_is_refused() {
+        let dir = std::env::temp_dir().join("ryfe-inside-repo-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("docs")).unwrap();
+        std::fs::create_dir_all(dir.join(".git")).unwrap();
+        std::fs::write(dir.join("docs/readme.md"), "hi").unwrap();
+        let repo = dir.to_str().unwrap();
+
+        assert!(inside_repo(repo, "docs/readme.md").is_ok());
+        assert!(
+            inside_repo(repo, "./docs/readme.md").is_ok(),
+            "a ./ prefix is still inside"
+        );
+        assert!(inside_repo(repo, "../secrets.md").is_err());
+        assert!(inside_repo(repo, "docs/../../secrets.md").is_err());
+        assert!(inside_repo(repo, ".git/config").is_err(), "the repository itself is off limits");
+        assert!(inside_repo(repo, "/etc/passwd").is_err(), "an absolute path is not a path in here");
+        assert!(inside_repo(repo, "-o").is_err(), "a path never becomes a flag");
+        assert!(inside_repo(repo, "").is_err());
+        assert!(
+            inside_repo("C:/not/a/repository", "a.md").is_err(),
+            "it has to be a repository"
+        );
+        assert_eq!(existing_size(repo, "docs/readme.md"), Some(2));
+        assert_eq!(existing_size(repo, "docs/new.md"), None);
+        assert_eq!(read_text(repo, "docs/readme.md").unwrap(), "hi");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_single_file_commit_names_its_path() {
+        assert_eq!(
+            argv("commit_file", &["Add README.md", "README.md"]).unwrap(),
+            vec!["commit", "-m", "Add README.md", "--", "README.md"],
+            "a pathspec commit takes only that file"
+        );
+        assert!(argv("commit_file", &["", "README.md"]).is_none());
+        assert!(
+            argv("commit_file", &["Add it", "-a"]).is_none(),
+            "and its path cannot be a flag"
+        );
     }
 
     #[test]

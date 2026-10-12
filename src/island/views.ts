@@ -8,7 +8,15 @@
  */
 
 import { openExternal, setFocusable } from '../core/bridge';
-import { chat, send as sendMessage } from '../core/chatstate';
+import {
+  approveProposal,
+  chat,
+  commitAndPush,
+  declineProposal,
+  send as sendMessage,
+  type Message,
+  type Proposal,
+} from '../core/chatstate';
 import {
   backToRepo,
   backToRepos,
@@ -734,10 +742,79 @@ export const calendarView: View = {
 // The assistant
 // ---------------------------------------------------------------------------
 
+/**
+ * What the model did on the way to its reply, folded into one line.
+ *
+ * Reading a repository runs a dozen tool calls, and a dozen chips stacked above
+ * every answer buries the answer. The line says what happened and unfolds on a
+ * click; whether it is unfolded lives on the message, so the redraw that comes
+ * with every streamed word cannot shut it again.
+ */
+function steps(m: Message, i: number): string {
+  if (!m.used?.length) return '';
+  const names = m.used.map((t) => t.replace(/_/g, ' '));
+  // Repeats are counted rather than listed: five `read file` chips are noise.
+  const counts = new Map<string, number>();
+  for (const n of names) counts.set(n, (counts.get(n) ?? 0) + 1);
+  const summary = [...counts].map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(', ');
+  const head =
+    `<button class="stepshead" data-steps="${i}" aria-expanded="${m.open === true}" ` +
+    `title="${esc(summary)}">${m.open ? '▾' : '▸'} ` +
+    `${names.length} step${names.length === 1 ? '' : 's'} · ${esc(summary)}</button>`;
+  if (!m.open) return head;
+  return (
+    `<div class="steps">${head}` +
+    names.map((t) => `<span class="tool"><span class="dot"></span>${esc(t)}</span>`).join('') +
+    `</div>`
+  );
+}
+
+/**
+ * The card a proposed file arrives on.
+ *
+ * It shows the file itself rather than a description of it: approving is the
+ * only thing that writes anything, so what is being approved has to be visible.
+ */
+function proposalCard(p: Proposal, i: number): string {
+  // A long README would fill the panel; the rest is still written in full.
+  const preview =
+    p.content.length > 1200 ? p.content.slice(0, 1200) + '\n…' : p.content;
+  const head =
+    `<div class="prophead"><span>${esc(p.path)}</span>` +
+    `<span class="chip${p.existingBytes != null ? ' hot' : ''}">` +
+    `${p.existingBytes != null ? 'replaces an existing file' : 'new file'}</span></div>`;
+
+  if (p.state === 'pending') {
+    return (
+      `<div class="prop">${head}<pre class="propbody">${esc(preview)}</pre>` +
+      `<div class="commitrow">` +
+      `<button class="btn" data-prop="write" data-i="${i}">` +
+      `${p.existingBytes != null ? 'Replace it' : 'Create it'}</button>` +
+      `<button class="btn ghost" data-prop="cancel" data-i="${i}">Cancel</button>` +
+      `</div></div>`
+    );
+  }
+
+  const note = p.note
+    ? `<div class="hintline${p.state === 'failed' ? ' bad' : ''}">${esc(p.note)}</div>`
+    : '';
+  const offer =
+    p.state === 'done' && p.offer
+      ? `<div class="commitrow">` +
+        `<button class="btn" data-prop="push" data-i="${i}">Commit and push it</button>` +
+        `<button class="btn ghost" data-prop="later" data-i="${i}">Not now</button>` +
+        `</div>`
+      : '';
+  return `<div class="prop">${head}${note}${offer}</div>`;
+}
+
 export const chatView: View = {
   id: 'ryfe',
   label: 'Ryfe',
-  hue: 'var(--acc)',
+  // The accent's own value, not `var(--acc)`: the shell writes the hue into
+  // `--acc` on the panel, so that would be a cycle and every button in here
+  // would come out with no background at all.
+  hue: 'var(--acc-b)',
   glyph: GLYPH.ryfe,
 
   subtitle() {
@@ -753,15 +830,10 @@ export const chatView: View = {
 
   render() {
     const bubbles = chat.messages
-      .map((m) => {
-        const tools = m.used?.length
-          ? m.used
-              .map(
-                (t) =>
-                  `<span class="tool"><span class="dot"></span>${esc(t.replace(/_/g, ' '))}</span>`,
-              )
-              .join('')
-          : '';
+      .map((m, i) => {
+        const tools = steps(m, i);
+        // A proposal is the card itself, not a bubble with words in it.
+        if (m.proposal) return tools + proposalCard(m.proposal, i);
         return (
           tools +
           `<span class="bub ${m.role === 'me' ? 'me' : m.role === 'err' ? 'err' : 'bot'}">` +
@@ -783,8 +855,8 @@ export const chatView: View = {
       : emptyState(
           'Nothing asked yet',
           'With a DeepSeek key set, this can read your repositories and pull',
-          'requests, and propose changes for you to approve — it never',
-          'commits, pushes or sends anything on its own.',
+          'requests, and write files you approve. Nothing is created, committed',
+          'or pushed until you say so on the card it shows you.',
         );
 
     return (
@@ -827,6 +899,32 @@ export const chatView: View = {
     root.querySelector('#chatthink')?.addEventListener('click', () => {
       chat.think = !chat.think;
       refresh();
+    });
+
+    // Unfolding what the model did to get to a reply.
+    root.querySelectorAll<HTMLButtonElement>('[data-steps]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const m = chat.messages[Number(b.dataset.steps ?? -1)];
+        if (!m) return;
+        m.open = !m.open;
+        refresh();
+      });
+    });
+
+    // The proposal cards' buttons, re-bound on every render like the rest of
+    // the panel. The index is what finds the proposal the button belongs to.
+    root.querySelectorAll<HTMLButtonElement>('[data-prop]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const p = chat.messages[Number(b.dataset.i ?? -1)]?.proposal;
+        if (!p) return;
+        if (b.dataset.prop === 'write') void approveProposal(p);
+        else if (b.dataset.prop === 'push') void commitAndPush(p);
+        else if (b.dataset.prop === 'cancel') declineProposal(p);
+        else {
+          p.offer = false;
+          refresh();
+        }
+      });
     });
 
     // Keep the newest message in view without stealing the scroll position the

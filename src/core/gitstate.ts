@@ -257,8 +257,8 @@ interface PublishCheck {
  * Asked of Rust, which counts with `-uall` — the page only ever sees `git
  * status`, which collapses a folder of dependencies into a single line.
  */
-async function unsafeToPublish(repo: Repo): Promise<string | null> {
-  const check = await invoke<PublishCheck>('git_publish_check', { repo: repo.path });
+export async function unsafeToPublish(path: string): Promise<string | null> {
+  const check = await invoke<PublishCheck>('git_publish_check', { repo: path });
   if (check.conflicts > 0) {
     return 'There are unresolved conflicts in this folder — sort those out first.';
   }
@@ -324,7 +324,7 @@ export async function connect() {
     // or created: a folder that fails this is left exactly as it was.
     await reloadStatus();
     const files = git.status?.files ?? [];
-    const refused = await unsafeToPublish(repo);
+    const refused = await unsafeToPublish(repo.path);
     if (refused) {
       git.error = refused;
       return;

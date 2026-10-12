@@ -139,6 +139,7 @@ pub fn run() {
             git::git_preview,
             git::git_publish_check,
             git::git_run,
+            git::file_write,
             github::gh_pulse,
             github::gh_activity,
             github::gh_create_repo,

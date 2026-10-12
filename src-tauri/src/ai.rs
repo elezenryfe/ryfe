@@ -57,8 +57,13 @@ static HISTORY: Mutex<Vec<Value>> = Mutex::new(Vec::new());
 const SYSTEM: &str = "\
 You are Ryfe, a small assistant that lives at the top of the user's screen on Windows.
 
-You can read the user's local git repositories and their GitHub pull requests through tools. \
-Use them rather than guessing — if a question is about their code, look before you answer.
+You can read the user's local git repositories, the files inside them, and their GitHub pull \
+requests through tools. Use them rather than guessing — if a question is about their code, look \
+before you answer.
+
+You can offer to write a file with `propose_create_file`. Read enough of the repository first \
+that the file describes *their* project rather than a generic one, and put the whole file in \
+`content` rather than describing what it would say.
 
 Two rules about acting:
 - Nothing you do changes anything. Tools whose names start with `propose_` show the user a card \
@@ -132,6 +137,36 @@ fn read_tools() -> Value {
         {
             "type": "function",
             "function": {
+                "name": "list_files",
+                "description": "Every file git knows about in a repository — the tracked ones plus the untracked ones that are not ignored. Ignored folders such as node_modules are left out. Use it to see what a project is made of.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "repo": { "type": "string" },
+                        "path": { "type": "string", "description": "Optional folder to list, relative to the repository root." }
+                    },
+                    "required": ["repo"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "The contents of one text file inside a repository. Read the files that describe a project — its README, package.json, pyproject.toml, main module — before writing about it or writing a file of your own.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "repo": { "type": "string" },
+                        "path": { "type": "string", "description": "Path of the file, relative to the repository root." }
+                    },
+                    "required": ["repo", "path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "gh_pulse",
                 "description": "The user's open pull requests and the pull requests waiting on their review, each with its CI state.",
                 "parameters": { "type": "object", "properties": {}, "required": [] }
@@ -155,6 +190,22 @@ fn propose_tools() -> Value {
                         "message": { "type": "string", "description": "The commit message you are proposing. One short line, no trailing full stop." }
                     },
                     "required": ["repo", "message"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "propose_create_file",
+                "description": "Offer to write one file, with its complete contents. This does NOT write it — the user gets a card showing the path and the text, and has to approve it. Read the repository first so the file is about their project.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "repo": { "type": "string" },
+                        "path": { "type": "string", "description": "Where the file goes, relative to the repository root." },
+                        "content": { "type": "string", "description": "The entire file, exactly as it should be written. Not a summary, not a diff." }
+                    },
+                    "required": ["repo", "path", "content"]
                 }
             }
         },
@@ -273,6 +324,39 @@ async fn run_read_tool(name: &str, args: &Value) -> Result<String, String> {
                 .unwrap_or(false);
             Ok(cap(
                 crate::git::git_diff(repo.to_string(), Some(path.to_string()), staged).await?,
+            ))
+        }
+        "list_files" => {
+            if repo.is_empty() {
+                return Err("repo is required".into());
+            }
+            let mut argv = vec![
+                "ls-files".to_string(),
+                "--cached".to_string(),
+                "--others".to_string(),
+                "--exclude-standard".to_string(),
+            ];
+            if let Some(sub) = args
+                .get("path")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty())
+            {
+                argv.push("--".to_string());
+                argv.push(sub.to_string());
+            }
+            Ok(cap(crate::git::run_read(repo, argv).await?))
+        }
+        "read_file" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            if repo.is_empty() || path.is_empty() {
+                return Err("repo and path are required".into());
+            }
+            let (repo, path) = (repo.to_string(), path.to_string());
+            // The path is checked against the repository in one place, in git.rs.
+            Ok(cap(
+                tauri::async_runtime::spawn_blocking(move || crate::git::read_text(&repo, &path))
+                    .await
+                    .map_err(|e| format!("read failed: {e}"))??,
             ))
         }
         "gh_pulse" => {
@@ -604,12 +688,24 @@ pub async fn ai_send(app: AppHandle, text: String, think: bool) -> Result<Reply,
             let raw = call["function"]["arguments"].as_str().unwrap_or("{}");
             // Models do produce malformed JSON; a bad call is a result to
             // report, not a crash.
-            let args: Value = serde_json::from_str(raw).unwrap_or_else(|_| json!({}));
+            let mut args: Value = serde_json::from_str(raw).unwrap_or_else(|_| json!({}));
             let id = call["id"].as_str().unwrap_or("").to_string();
 
             used.push(name.clone());
 
             let result = if name.starts_with("propose_") {
+                // A file card has to say whether it would replace something, so
+                // the existing file is measured here rather than guessed at.
+                if name == "propose_create_file" {
+                    if let (Some(repo), Some(path)) = (
+                        args.get("repo").and_then(|v| v.as_str()),
+                        args.get("path").and_then(|v| v.as_str()),
+                    ) {
+                        if let Some(bytes) = crate::git::existing_size(repo, path) {
+                            args["existing_bytes"] = json!(bytes);
+                        }
+                    }
+                }
                 // Nothing is executed. The front end shows a card, and the model
                 // is told plainly that no action has happened.
                 let _ = app.emit("ai-proposal", json!({ "tool": name, "args": args }));
